@@ -34,10 +34,10 @@ function kineticenergy{T<:Real}(px::T, py::T, pz::T)
 end
 
 function solveschrodingereqn()
-    pdesc = ProblemDescription(0.5, [4.0], [Int16(64)], 0.05, Int8(4))
+    pdesc = ProblemDescription(0.5, [4.0], [Int16(128)], 0.4, Int8(20))
     sysdesc = generatesystemdescriptor(pdesc)
 
-    ψ = StateSet(Complex128, 4, 64)
+    ψ = StateSet(Complex128, 20, 128)
 
     T = discretizeOperators(kineticenergy, sysdesc, pdesc, false)
     V = discretizeOperators(harmonicpotential, sysdesc, pdesc, true)
@@ -64,6 +64,15 @@ function solveschrodingereqn()
     positionspace!(ψ, sysdesc)
     δH = 0.0
     δE = 0.0
+
+    print_with_color(:green, "Iteration:")
+    println(1)
+    for h in H
+        println(abs(h))
+    end
+    println("")
+
+    iter = 1
 
     for i=1:100
         ψˈ = deepcopy(ψ)
@@ -105,7 +114,7 @@ function solveschrodingereqn()
         end
 
         if δE <= γ*δH
-            @show i
+            iter = i+1
             break
         end
 
@@ -115,11 +124,24 @@ function solveschrodingereqn()
         eTˈ = exp(-1.0*ϵ*χ*T)
         τ = eV*eT*eV
         τˈ = eVˈ*eTˈ*eVˈ
+
+        print_with_color(:green, "Iteration:")
+        println(i+1)
+        for h in H
+            println(abs(h))
+        end
+        println("")
+
     end
 
-    @show abs(H)
-    @show δE
-    @show δH
+    fs = open("output.txt", "w")
+    serialize(fs, pdesc)
+    serialize(fs, V)
+    serialize(fs, ψ)
+    serialize(fs, abs(H))
+    serialize(fs, δE/δH)
+    serialize(fs, iter)
+    close(fs)
 end
 
 function discretegradient{T<:FloatingPoint}(operator::Function, syd::SystemDescription{T}, pdesc::ProblemDescription{T})
@@ -175,6 +197,14 @@ function solveschrodingereqn4()
     δH = 0.0
     δE = 0.0
 
+    print_with_color(:green, "Iteration:")
+    println(1)
+    for h in H
+        println(abs(h))
+    end
+    println("")
+
+    iter = 1
     for i=1:100
         ψˈ = deepcopy(ψ)
 
@@ -215,7 +245,7 @@ function solveschrodingereqn4()
         end
 
         if δE <= γ*δH
-            @show i
+            iter = i
             break
         end
 
@@ -227,11 +257,24 @@ function solveschrodingereqn4()
         eΔVˈ = exp(-(2.0/3.0)*ϵ*χ*(V + ((1.0/48.0)*((ϵ*χ)^2)*ΔV)))
         τ = eV*eT*eΔV*eT*eV
         τˈ = eVˈ*eTˈ*eΔVˈ*eTˈ*eVˈ
+
+        print_with_color(:green, "Iteration:")
+        println(i+1)
+        for h in H
+            println(abs(h))
+        end
+        println("")
+
     end
 
-    @show abs(H)
-    @show δE
-    @show δH
+    fs = open("output.txt", "w")
+    serialize(fs, pdesc)
+    serialize(fs, V)
+    serialize(fs, ψ)
+    serialize(fs, abs(H))
+    serialize(fs, δE/δH)
+    serialize(fs, iter)
+    close(fs)    
 end
 
-@time solveschrodingereqn4()
+@time solveschrodingereqn()
