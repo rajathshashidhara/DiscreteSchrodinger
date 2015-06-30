@@ -54,6 +54,11 @@ immutable QuantumOperator{T<:Complex, N}
     positionbasis::Bool
 end
 
+immutable CompositeQuantumOperator{T<:Complex, N}
+    queue::Array{QuantumOperator{T,N},1}
+end
+
+QOperator = Union(QuantumOperator, CompositeQuantumOperator)
 ### Outer constructors
 State{T<:Complex}(::Type{T},vars...) = State(rand(T, vars...), true, false)
 
@@ -154,7 +159,7 @@ function discretizeOperators{T<:FloatingPoint}(operator::Function,
 end
 
 (+){T<:State}(a::StateZero, b::T) = b
-(+){T<:State} (a::T, b::T) = begin
+(+){T<:State}(a::T, b::T) = begin
     if a.inpositionbasis==b.inpositionbasis
         c = deepcopy(a)
         c.components = a.components + b.components
@@ -163,11 +168,11 @@ end
         error("States represented in two different bases cannot be added.")
     end
 end
-(+){T<:StateSet} (a::T, b::T) = begin
+(+){T<:StateSet}(a::T, b::T) = begin
     convert(T, map(+, a, b))
 end
 
-(+){T<:QuantumOperator} (a::T, b::T) = begin
+(+){T<:QuantumOperator}(a::T, b::T) = begin
     if a.positionbasis == b.positionbasis
         QuantumOperator(a.doperator+b.doperator, a.positionbasis)
     else
@@ -175,30 +180,30 @@ end
     end
 end
 
-(-){T<:State} (a::T, b::T) = a + (-1*b)
-(-){T<:StateSet} (a::T, b::T) = a + (-1*b)
-(-){T<:QuantumOperator} (a::T, b::T) = a + (-1*b)
+(-){T<:State}(a::T, b::T) = a + (-1*b)
+(-){T<:StateSet}(a::T, b::T) = a + (-1*b)
+(-){T<:QuantumOperator}(a::T, b::T) = a + (-1*b)
 
-(*){T<:Complex, Z<:Number, N} (a::Z, b::State{T,N}) = begin
+(*){T<:Complex,Z<:Number,N}(a::Z, b::State{T,N}) = begin
     c = deepcopy(b)
     c.components = convert(T,a) * b.components
     c
 end
-(*){T<:Complex, Z<:Number, N} (a::Z, b::StateSet{T,N}) = begin
+(*){T<:Complex,Z<:Number,N}(a::Z, b::StateSet{T,N}) = begin
     c::Array{State{T,N},1} = [a*i for i in b]
     StateSet(c)
 end
-(*){T<:Complex, N, Z<:Number} (a::Array{Z,2}, b::StateSet{T,N}) = begin
+(*){T<:Complex,N,Z<:Number}(a::Array{Z,2}, b::StateSet{T,N}) = begin
     convert(StateSet{T,N}, a*b.states)
 end
 
-(*){T<:Complex,N} (O::QuantumOperator{T, N}, s::State{T,N}) = begin
+(*){T<:Complex,N}(O::QuantumOperator{T, N}, s::State{T,N}) = begin
     s1 = deepcopy(s)
     multiply!(O, s1)
     s1
 end
 
-(*){T<:Complex,N} (O::QuantumOperator{T,N}, s::StateSet{T,N}) = begin
+(*){T<:Complex,N}(O::QuantumOperator{T,N}, s::StateSet{T,N}) = begin
     s1 = deepcopy(s)
     multiply!(O, s1)
     s1
@@ -206,28 +211,53 @@ end
 
 (*){T<:State}(s1::T, s2::T) = innerproduct(s1, s2)
 
-(*){T<:QuantumOperator, Z<:Number} (a::Z, O::T) = begin
+(*){T<:QuantumOperator,Z<:Number}(a::Z, O::T) = begin
     c = a*O.doperator
     QuantumOperator(c, O.positionbasis)
 end
 
-(/){T<:Complex, N, Z<:Number}(x::State{T,N}, a::Z) = begin
+(*){T<:QuantumOperator}(a::T, b::T) = begin
+    CompositeQuantumOperator([b,a])
+end
+
+(*){T<:Complex,N}(a::QuantumOperator{T,N},b::CompositeQuantumOperator{T,N}) = begin
+    c = deepcopy(b)
+    push!(c.queue, a)
+    c
+end
+
+(*){T<:Complex,N}(a::CompositeQuantumOperator{T,N}, b::QuantumOperator{T,N}) = begin
+    c = deepcopy(a)
+    insert!(c.queue, 1, b)
+    c
+end
+
+(*){T<:Complex,N}(a::CompositeQuantumOperator{T,N}, b::State{T,N}) = begin
+    c = deepcopy(b)
+    o = deepcopy(a)
+    while !isempty(o.queue)
+        c  = pop!(o.queue)*c
+    end
+    c
+end
+
+(/){T<:Complex,N,Z<:Number}(x::State{T,N}, a::Z) = begin
     c = deepcopy(x)
     c.components = x.components / convert(T,a)
     c
 end
 
-(/){T<:QuantumOperator, Z<:Number} (a::Z, O::T) = begin
+(/){T<:QuantumOperator,Z<:Number}(a::Z, O::T) = begin
     c = O.doperator/a
     QuantumOperator(c, O.positionbasis)
 end
 
-Base.exp{T<:QuantumOperator} (O::T) = begin
+Base.exp{T<:QuantumOperator}(O::T) = begin
     c = exp(O.doperator)
     QuantumOperator(c, O.positionbasis)
 end
 
-function multiply!{T<:Complex, N} (O::QuantumOperator{T,N}, b::State{T,N})
+function multiply!{T<:Complex,N}(O::QuantumOperator{T,N}, b::State{T,N})
     if O.positionbasis==b.inpositionbasis
         for ind in eachindex(b.components)
             b.components[ind...] = O[ind...]*b[ind...]
@@ -237,7 +267,21 @@ function multiply!{T<:Complex, N} (O::QuantumOperator{T,N}, b::State{T,N})
     end
 end
 
-function multiply!{T<:Complex, N} (O::QuantumOperator{T,N}, b::StateSet{T,N})
+function multiply!{T<:Complex,N}(O::CompositeQuantumOperator{T,N}, b::State{T,N})
+    Op = deepcopy(O)
+    while !isempty(Op.queue)
+        multiply!(pop!(Op.queue), b)
+    end
+    b
+end
+
+function multiply!{T<:Complex,N}(O::QuantumOperator{T,N}, b::StateSet{T,N})
+    for c in b
+        multiply!(O, c)
+    end
+end
+
+function multiply!{T<:Complex,N}(O::CompositeQuantumOperator{T,N}, b::StateSet{T,N})
     for c in b
         multiply!(O, c)
     end
@@ -263,30 +307,43 @@ function multiply!{T<:FloatingPoint,N}(O::QuantumOperator{Complex{T},N}, s::Stat
     end
 end
 
+function multiply!{T<:FloatingPoint,N}(O::CompositeQuantumOperator{Complex{T},N}, s::State{Complex{T},N}, syd::SystemDescription{T})
+    Op = deepcopy(O)
+    while !isempty(Op.queue)
+        multiply!(pop!(Op.queue), s, syd)
+    end    
+end
+
 function multiply!{T<:FloatingPoint,N}(O::QuantumOperator{Complex{T},N}, s::StateSet{Complex{T},N}, syd::SystemDescription{T})
     for c in s
         multiply!(O,c,syd)
     end
 end
 
-function multiply!{T<:Complex, Z<:Number, N} (a::Z, b::State{T,N})
+function multiply!{T<:FloatingPoint,N}(O::CompositeQuantumOperator{Complex{T},N}, s::StateSet{Complex{T},N}, syd::SystemDescription{T})
+    for c in s
+        multiply!(O,c,syd)
+    end
+end
+
+function multiply!{T<:Complex,Z<:Number,N}(a::Z, b::State{T,N})
     b.components = convert(T,a)*b.components
 end
 
-function multiply!{T<:Complex, N, Z<:Number} (a::Array{Z,2}, b::StateSet{T,N})
+function multiply!{T<:Complex,N,Z<:Number}(a::Array{Z,2}, b::StateSet{T,N})
     b.states = a*b.states
 end
 
-function add!{T<:State} (a::T, b::T)
+function add!{T<:State}(a::T, b::T)
     a.components = a.components + b.components
 end
 
-function divide!{T<:Complex, Z<:Number, N} (a::State{T,N}, b::Z)
+function divide!{T<:Complex,Z<:Number,N}(a::State{T,N}, b::Z)
     a.components = a.components / convert(T, b)
 end
 
 # Does not check if they are of the same basis
-function innerproduct{T<:Complex, N}(x::State{T,N}, y::State{T,N})
+function innerproduct{T<:Complex,N}(x::State{T,N}, y::State{T,N})
     s = assertsamedimensions(x,y)
     n = length(x.components)
     k = zero(T)
@@ -297,14 +354,14 @@ function innerproduct{T<:Complex, N}(x::State{T,N}, y::State{T,N})
     k
 end
 
-function innerproduct{T<:Complex, N}(x::StateSet{T,N}, y::StateSet{T,N})
+function innerproduct{T<:Complex,N}(x::StateSet{T,N}, y::StateSet{T,N})
     convert(Array{T,1}, map(innerproduct, x, y))
 end
 
-LinAlg.norm{T<:State} (x::T) = sqrt(innerproduct(x,x))
-LinAlg.norm{T<:StateSet} (x::T) = [norm(i) for i in x]
+LinAlg.norm{T<:State}(x::T) = sqrt(innerproduct(x,x))
+LinAlg.norm{T<:StateSet}(x::T) = [norm(i) for i in x]
 
-function overlapmatrix{T<:Complex,N} (x::StateSet{T,N})
+function overlapmatrix{T<:Complex,N}(x::StateSet{T,N})
     temp = zeros(T, length(x), length(x))
     for i=1:length(x), j=1:length(x)
         temp[i,j] = innerproduct(x[i], x[j])
@@ -347,11 +404,6 @@ function positionspace!{T<:FloatingPoint,N}(s::State{Complex{T},N}, syd::SystemD
         return
     end
     syd.ifftplan!(s.components)
-    # for ind in eachindex(s.components)
-    #     if sum(ind)%2==1
-    #         s.components[ind] = s.components[ind]*(-1.0+0.0im)
-    #     end
-    # end
     divide!(s,syd.fftnorm)
     s.inpositionbasis = true
 end
@@ -377,11 +429,6 @@ function momentumspace!{T<:FloatingPoint,N}(s::State{Complex{T},N} , syd::System
     end
 
     syd.fftplan!(s.components)
-    # for ind in eachindex(s.components)
-    #     if sum(ind)%2==1
-    #         s.components[ind] = s.components[ind]*(-1.0+0.0im)
-    #     end
-    # end
     divide!(s,syd.fftnorm)
     s.inpositionbasis = false
 end
@@ -395,7 +442,6 @@ function momentumspace!{T<:FloatingPoint,N}(s::State{Complex{T},N})
     divide!(s, sqrt(prod(size(s))))
     s.inpositionbasis = false
 end
-
 
 function momentumspace!{T<:FloatingPoint,N}(s::StateSet{Complex{T},N}, syd::SystemDescription{T})
     for st in s

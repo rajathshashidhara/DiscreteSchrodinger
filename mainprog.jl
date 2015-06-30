@@ -34,7 +34,7 @@ function kineticenergy{T<:Real}(px::T, py::T, pz::T)
 end
 
 function solveschrodingereqn()
-    pdesc = ProblemDescription(0.05, [4.0], [Int16(64)], 0.4, Int8(4))
+    pdesc = ProblemDescription(0.1, [4.0], [Int16(64)], 0.4, Int8(4))
     sysdesc = generatesystemdescriptor(pdesc)
 
     s = StateSet(Complex128, 4, 64)
@@ -45,11 +45,10 @@ function solveschrodingereqn()
     # second order factorization
     eV = exp(-0.5*pdesc.timestep*V)
     eT = exp(-1.0*pdesc.timestep*T)
+    τ = eV*eT*eV
 
     for i=1:100
-        multiply!(eV, s, sysdesc)
-        multiply!(eT, s, sysdesc)
-        multiply!(eV, s, sysdesc)
+        multiply!(τ, s, sysdesc)
         orthonormalize!(s)
     end
 
