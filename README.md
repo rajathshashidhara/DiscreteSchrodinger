@@ -1,4 +1,5 @@
 <b>Schrodinger</b>
+MIT LICENSE
 
 Solve the schrodinger equation for any arbitrary potentials in 1, 2 or 3-dimensions.
 
